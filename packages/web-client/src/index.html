@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>WYRE</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #000;
+      --fg:      #fff;
+      --green:   #39ff14;
+      --red:     #ff2222;
+      --dim:     #444;
+      --dim2:    #222;
+      --font:    'Courier New', Courier, monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font);
+      font-size: 13px;
+      line-height: 1.5;
+      min-height: 100dvh;
+      padding-bottom: 80px;
+      /* efecto scanlines sutil */
+      background-image: repeating-linear-gradient(
+        0deg, transparent, transparent 3px,
+        rgba(255,255,255,0.015) 3px, rgba(255,255,255,0.015) 4px
+      );
+    }
+
+    /* ── HEADER ── */
+    header {
+      border-bottom: 2px solid var(--fg);
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      background: var(--bg);
+      z-index: 10;
+    }
+
+    .logo {
+      font-size: 22px;
+      font-weight: bold;
+      letter-spacing: 6px;
+      text-transform: uppercase;
+    }
+
+    .ws-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--dim);
+    }
+
+    /* Pixel dot: 4 cuadrados CSS para simular pixel art */
+    .ws-dot {
+      width: 10px;
+      height: 10px;
+      background: var(--red);
+      image-rendering: pixelated;
+    }
+    .ws-dot.on {
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+      animation: blink 1.4s steps(1) infinite;
+    }
+    @keyframes blink { 50% { opacity: 0.4; } }
+
+    /* ── LAYOUT ── */
+    main { padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+
+    /* ── CARDS ── */
+    .card {
+      border: 2px solid var(--fg);
+      padding: 14px;
+    }
+
+    .card-title {
+      font-size: 10px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--green);
+      border-bottom: 1px solid var(--dim);
+      padding-bottom: 8px;
+      margin-bottom: 14px;
+    }
+
+    /* ── DROP ZONE ── */
+    .drop-zone {
+      border: 2px dashed var(--dim);
+      padding: 28px 12px;
+      text-align: center;
+      cursor: pointer;
+      position: relative;
+      transition: border-color 0.1s, background 0.1s;
+    }
+    .drop-zone.drag-over {
+      border-color: var(--green);
+      background: rgba(57,255,20,0.05);
+    }
+    .drop-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Icono pixel art: flecha arriba hecho con CSS box-shadow */
+    .pixel-upload-icon {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: var(--fg);
+      margin: 0 auto 14px;
+      box-shadow:
+        /* flecha arriba 9x9 px */
+        0px  -16px 0 var(--fg),
+        -8px -8px  0 var(--fg),
+        8px  -8px  0 var(--fg),
+        -16px 0px  0 var(--fg),
+        16px  0px  0 var(--fg),
+        0px   8px  0 var(--fg),
+        0px   16px 0 var(--fg),
+        0px   24px 0 var(--fg),
+        /* base de la flecha */
+        -8px  24px 0 var(--fg),
+        8px   24px 0 var(--fg);
+    }
+
+    .drop-text {
+      font-size: 12px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--dim);
+    }
+    .drop-text span { color: var(--fg); }
+
+    /* ── COLA DE ARCHIVOS ── */
+    .upload-queue { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+
+    .queue-item {
+      border: 1px solid var(--dim);
+      padding: 8px;
+      background: var(--dim2);
+    }
+
+    .queue-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .queue-item-name {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 12px;
+    }
+    .queue-item-size { font-size: 11px; color: var(--dim); flex-shrink: 0; }
+    .queue-item-status { font-size: 11px; flex-shrink: 0; letter-spacing: 1px; }
+    .s-pending   { color: var(--dim); }
+    .s-uploading { color: var(--green); }
+    .s-done      { color: var(--green); }
+    .s-error     { color: var(--red); }
+
+    /* Barra de progreso pixel */
+    .progress-bar {
+      height: 10px;
+      background: var(--dim2);
+      border: 1px solid var(--dim);
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--fg);
+      width: 0%;
+      transition: width 0.12s steps(10);
+    }
+    .progress-fill.done  { background: var(--green); width: 100%; }
+    .progress-fill.error { background: var(--red); }
+
+    /* ── BOTONES ── */
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 11px 14px;
+      background: var(--fg);
+      color: var(--bg);
+      border: 2px solid var(--fg);
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: bold;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: background 0.05s, color 0.05s;
+    }
+    .btn:hover:not(:disabled) { background: var(--green); border-color: var(--green); color: #000; }
+    .btn:active:not(:disabled) { transform: translate(2px, 2px); }
+    .btn:disabled { background: var(--dim2); color: var(--dim); border-color: var(--dim); cursor: not-allowed; }
+
+    .btn-sm {
+      background: var(--bg);
+      color: var(--dim);
+      border: 1px solid var(--dim);
+      padding: 5px 10px;
+      font-size: 10px;
+      letter-spacing: 2px;
+      width: auto;
+      margin-top: 0;
+    }
+    .btn-sm:hover { color: var(--fg); border-color: var(--fg); background: var(--bg); }
+
+    /* ── LISTA ARCHIVOS PC ── */
+    .files-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .file-list { display: flex; flex-direction: column; gap: 4px; }
+
+    .file-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid var(--dim);
+      padding: 9px 10px;
+      background: var(--bg);
+      cursor: pointer;
+      color: var(--fg);
+      font-family: var(--font);
+      font-size: 12px;
+      width: 100%;
+      text-align: left;
+      transition: border-color 0.05s, background 0.05s;
+    }
+    .file-item:hover { border-color: var(--fg); background: var(--dim2); }
+    .file-item:active { background: var(--dim); }
+
+    /* Etiqueta pixel tipo [IMG] */
+    .file-tag {
+      font-size: 9px;
+      letter-spacing: 1px;
+      border: 1px solid var(--dim);
+      padding: 1px 3px;
+      color: var(--dim);
+      flex-shrink: 0;
+      width: 34px;
+      text-align: center;
+    }
+    .file-item:hover .file-tag { border-color: var(--green); color: var(--green); }
+
+    .file-name {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .file-size { font-size: 11px; color: var(--dim); flex-shrink: 0; }
+    .file-dl   { color: var(--dim); font-size: 14px; flex-shrink: 0; }
+    .file-item:hover .file-dl { color: var(--green); }
+
+    /* ── ESTADO VACIO ── */
+    .empty {
+      text-align: center;
+      padding: 28px 12px;
+      color: var(--dim);
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      border: 1px dashed var(--dim);
+    }
+
+    /* ── PANTALLA DE SESION EXPIRADA ── */
+    #expired-screen {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 999;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+      text-align: center;
+      padding: 24px;
+    }
+    #expired-screen.show { display: flex; }
+    .expired-title {
+      font-size: 18px;
+      font-weight: bold;
+      letter-spacing: 6px;
+      color: var(--red);
+      animation: blink 0.8s steps(1) infinite;
+    }
+    .expired-msg { font-size: 11px; letter-spacing: 2px; color: var(--dim); text-transform: uppercase; }
+
+    /* ── TOAST ── */
+    #toast-container {
+      position: fixed;
+      bottom: 14px;
+      left: 14px;
+      right: 14px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .toast {
+      border: 2px solid var(--fg);
+      background: var(--bg);
+      padding: 9px 12px;
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      animation: slide-in 0.08s steps(3);
+    }
+    .toast.success { border-color: var(--green); color: var(--green); }
+    .toast.error   { border-color: var(--red);   color: var(--red);   }
+    @keyframes slide-in {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">WYRE</div>
+  <div class="ws-status">
+    <div class="ws-dot" id="ws-dot"></div>
+    <span id="ws-label">OFFLINE</span>
+  </div>
+</header>
+
+<main>
+  <!-- Seccion: subir archivos al PC -->
+  <div class="card">
+    <div class="card-title">// ENVIAR A PC</div>
+    <div class="drop-zone" id="drop-zone">
+      <input type="file" id="file-input" multiple />
+      <div class="pixel-upload-icon"></div>
+      <div class="drop-text">
+        <span>TOCA PARA ELEGIR</span><br>
+        o arrastra archivos
+      </div>
+    </div>
+    <div class="upload-queue" id="upload-queue"></div>
+    <button class="btn" id="upload-btn" disabled>[ SUBIR ARCHIVOS ]</button>
+  </div>
+
+  <!-- Seccion: archivos del PC -->
+  <div class="card">
+    <div class="files-header">
+      <div class="card-title" style="margin-bottom:0">// ARCHIVOS DEL PC</div>
+      <button class="btn btn-sm" id="refresh-btn">[ REFRESH ]</button>
+    </div>
+    <div class="file-list" id="file-list">
+      <div class="empty">CARGANDO...</div>
+    </div>
+  </div>
+</main>
+
+<!-- Pantalla de sesion expirada -->
+<div id="expired-screen">
+  <div class="expired-title">SESION EXPIRADA</div>
+  <div class="expired-msg">El servidor ha cerrado la conexion.<br>Escanea el QR nuevamente.</div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+  // ── Token de sesion (leido de la URL) ──────────────────────────────────────
+  const token = new URLSearchParams(location.search).get('token') || '';
+
+  function apiUrl(path) {
+    return token ? path + (path.includes('?') ? '&' : '?') + 'token=' + token : path;
+  }
+
+  // ── Utilidades ─────────────────────────────────────────────────────────────
+
+  function formatSize(bytes) {
+    if (bytes === 0) return '0B';
+    const u = ['B','KB','MB','GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1) + u[i];
+  }
+
+  function getFileTag(name) {
+    const ext = (name.split('.').pop() || '').toLowerCase();
+    const m = {
+      jpg:'IMG', jpeg:'IMG', png:'IMG', gif:'IMG', webp:'IMG', svg:'IMG', bmp:'IMG',
+      mp4:'VID', mov:'VID', avi:'VID', mkv:'VID', webm:'VID',
+      mp3:'AUD', wav:'AUD', flac:'AUD', aac:'AUD', ogg:'AUD',
+      pdf:'PDF', doc:'DOC', docx:'DOC', txt:'TXT', md:'TXT',
+      xls:'XLS', xlsx:'XLS', csv:'CSV',
+      zip:'ZIP', rar:'ZIP', '7z':'ZIP', tar:'ZIP', gz:'ZIP',
+      js:'CODE', ts:'CODE', py:'CODE', java:'CODE', cpp:'CODE',
+      html:'WEB', css:'WEB', json:'JSON',
+      apk:'APK', exe:'EXE',
+    };
+    return m[ext] || 'FILE';
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function showToast(msg, type = '') {
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = 'toast ' + type;
+    t.textContent = msg;
+    c.appendChild(t);
+    setTimeout(() => t.remove(), 3000);
+  }
+
+  // ── WebSocket con reconexion automatica ────────────────────────────────────
+
+  let ws = null;
+  let wsDelay = 1000;
+
+  function connectWS() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsToken = token ? '?token=' + token : '';
+    ws = new WebSocket(proto + '//' + location.host + '/' + wsToken);
+
+    ws.addEventListener('open', () => { wsDelay = 1000; });
+
+    ws.addEventListener('message', (e) => {
+      let msg; try { msg = JSON.parse(e.data); } catch { return; }
+
+      if      (msg.type === 'connected')       { setStatus(true); }
+      else if (msg.type === 'upload-progress') { onProgress(msg.loaded, msg.total); }
+      else if (msg.type === 'upload-complete') { onComplete(msg.filename); loadFiles(); }
+      else if (msg.type === 'expired')         { showExpired(); }
+    });
+
+    ws.addEventListener('close', () => {
+      setStatus(false);
+      setTimeout(() => { wsDelay = Math.min(wsDelay * 2, 30000); connectWS(); }, wsDelay);
+    });
+
+    ws.addEventListener('error', () => ws.close());
+  }
+
+  function setStatus(on) {
+    const dot = document.getElementById('ws-dot');
+    const lbl = document.getElementById('ws-label');
+    if (on) { dot.classList.add('on'); lbl.textContent = 'ONLINE'; }
+    else    { dot.classList.remove('on'); lbl.textContent = 'OFFLINE'; }
+  }
+
+  function showExpired() {
+    document.getElementById('expired-screen').classList.add('show');
+  }
+
+  // ── Upload ─────────────────────────────────────────────────────────────────
+
+  let pendingFiles = [];
+
+  const dropZone   = document.getElementById('drop-zone');
+  const fileInput  = document.getElementById('file-input');
+  const uploadQueue = document.getElementById('upload-queue');
+  const uploadBtn  = document.getElementById('upload-btn');
+
+  fileInput.addEventListener('change', () => addFiles(fileInput.files));
+
+  dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    addFiles(e.dataTransfer.files);
+  });
+
+  function addFiles(list) {
+    if (!list || !list.length) return;
+    pendingFiles = [...list];
+    renderQueue();
+    uploadBtn.disabled = false;
+  }
+
+  function renderQueue() {
+    uploadQueue.innerHTML = '';
+    pendingFiles.forEach((f) => {
+      const id = encodeURIComponent(f.name);
+      const el = document.createElement('div');
+      el.className = 'queue-item';
+      el.id = 'qi-' + id;
+      el.innerHTML =
+        '<div class="queue-item-header">' +
+          '<div class="queue-item-name">' + escapeHtml(f.name) + '</div>' +
+          '<div class="queue-item-size">' + formatSize(f.size) + '</div>' +
+          '<div class="queue-item-status s-pending" id="qs-' + id + '">PENDIENTE</div>' +
+        '</div>' +
+        '<div class="progress-bar"><div class="progress-fill" id="qp-' + id + '"></div></div>';
+      uploadQueue.appendChild(el);
+    });
+  }
+
+  // El progreso llega como total del request (no por archivo individual)
+  let _lastTotal = 0;
+  function onProgress(loaded, total) {
+    _lastTotal = total;
+    const pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
+    pendingFiles.forEach((f) => {
+      const bar = document.getElementById('qp-' + encodeURIComponent(f.name));
+      const st  = document.getElementById('qs-' + encodeURIComponent(f.name));
+      if (bar) bar.style.width = pct + '%';
+      if (st && st.textContent !== 'OK') { st.textContent = pct + '%'; st.className = 'queue-item-status s-uploading'; }
+    });
+  }
+
+  function onComplete(filename) {
+    const bar = document.getElementById('qp-' + encodeURIComponent(filename));
+    const st  = document.getElementById('qs-' + encodeURIComponent(filename));
+    if (bar) bar.className = 'progress-fill done';
+    if (st)  { st.textContent = 'OK'; st.className = 'queue-item-status s-done'; }
+  }
+
+  uploadBtn.addEventListener('click', async () => {
+    if (!pendingFiles.length) return;
+    uploadBtn.disabled = true;
+    uploadBtn.textContent = '[ SUBIENDO... ]';
+
+    // Marcar todos como subiendo
+    pendingFiles.forEach((f) => {
+      const st = document.getElementById('qs-' + encodeURIComponent(f.name));
+      if (st) { st.textContent = '...'; st.className = 'queue-item-status s-uploading'; }
+    });
+
+    try {
+      const fd = new FormData();
+      pendingFiles.forEach((f) => fd.append('file', f));
+
+      const res = await fetch(apiUrl('/upload'), { method: 'POST', body: fd });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+
+      showToast('ARCHIVOS ENVIADOS', 'success');
+      pendingFiles = [];
+      fileInput.value = '';
+      uploadBtn.textContent = '[ SUBIR ARCHIVOS ]';
+      setTimeout(() => { uploadQueue.innerHTML = ''; uploadBtn.disabled = true; }, 1800);
+
+    } catch {
+      showToast('ERROR AL SUBIR', 'error');
+      pendingFiles.forEach((f) => {
+        const bar = document.getElementById('qp-' + encodeURIComponent(f.name));
+        const st  = document.getElementById('qs-' + encodeURIComponent(f.name));
+        if (bar) bar.className = 'progress-fill error';
+        if (st)  { st.textContent = 'ERROR'; st.className = 'queue-item-status s-error'; }
+      });
+      uploadBtn.disabled = false;
+      uploadBtn.textContent = '[ REINTENTAR ]';
+    }
+  });
+
+  // ── Lista de archivos del PC ───────────────────────────────────────────────
+
+  const fileList = document.getElementById('file-list');
+
+  async function loadFiles() {
+    try {
+      const res  = await fetch(apiUrl('/files'));
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      renderFiles(data.files || []);
+    } catch {
+      fileList.innerHTML = '<div class="empty">ERROR AL CARGAR</div>';
+    }
+  }
+
+  function renderFiles(files) {
+    if (!files.length) {
+      fileList.innerHTML = '<div class="empty">NO HAY ARCHIVOS COMPARTIDOS</div>';
+      return;
+    }
+    fileList.innerHTML = '';
+    files.forEach((f) => {
+      const btn = document.createElement('button');
+      btn.className = 'file-item';
+      btn.innerHTML =
+        '<span class="file-tag">' + getFileTag(f.name) + '</span>' +
+        '<span class="file-name">' + escapeHtml(f.name) + '</span>' +
+        '<span class="file-size">' + formatSize(f.size) + '</span>' +
+        '<span class="file-dl">▼</span>';
+      btn.addEventListener('click', () => downloadFile(f.name));
+      fileList.appendChild(btn);
+    });
+  }
+
+  function downloadFile(name) {
+    const a = document.createElement('a');
+    a.href = apiUrl('/download/' + encodeURIComponent(name));
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  document.getElementById('refresh-btn').addEventListener('click', loadFiles);
+
+  // ── Inicio ─────────────────────────────────────────────────────────────────
+  connectWS();
+  loadFiles();
+</script>
+</body>
+</html>

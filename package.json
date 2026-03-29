@@ -1,0 +1,10 @@
+﻿{
+  "name": "wyre",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev": "npm run dev --workspace=packages/cli",
+    "build": "npm run build --workspace=packages/server && npm run build --workspace=packages/web-client && npm run build --workspace=packages/cli"
+  },
+  "engines": { "node": ">=18.0.0" }
+}

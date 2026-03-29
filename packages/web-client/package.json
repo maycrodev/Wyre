@@ -1,0 +1,5 @@
+﻿{
+  "name": "@wyre/web-client",
+  "version": "0.1.0",
+  "scripts": { "dev": "echo 'web-client is static HTML, serve via @wyre/server'", "build": "node -e \"process.exit(0)\"" }
+}
